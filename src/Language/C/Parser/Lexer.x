@@ -140,8 +140,10 @@ $white+         ;
 -- * allows further ints after the file name a la GCC; as the GCC CPP docu
 --   doesn't say how many ints there can be, we allow an unbound number
 --
-\#$space*(line)?@int$space*(\"($infname|@charesc)*\"$space*)?(@int$space*)*\r?$eol
+\#$space*@int$space*(\"($infname|@charesc)*\"$space*)?(@int$space*)*\r?$eol
   { \pos len str -> setPos (adjustLineDirective len (takeChars len str) pos) >> lexToken' False }
+\#$space*line$space*@int$space*(\"($infname|@charesc)*\"$space*)?(@int$space*)*\r?$eol
+  { \pos len str -> setPos (adjustLineDirective2 len (takeChars len str) pos) >> lexToken' False }
 
 -- #pragma directive (K&R A12.8)
 --
@@ -387,6 +389,24 @@ adjustLineDirective pragmaLen str pos =
     where
     offs'           = (posOffset pos) + pragmaLen
     str'            = dropWhite . drop 1 $ str
+    (rowStr, str'') = span isDigit str'
+    row'      = read rowStr
+    str'''      = dropWhite str''
+    fnameStr      = takeWhile (/= '"') . drop 1 $ str'''
+    fname = posFile pos
+    fname'      | null str''' || head str''' /= '"' = fname
+     -- try and get more sharing of file name strings
+     | fnameStr == fname     = fname
+     | otherwise             = fnameStr
+    --
+    dropWhite = dropWhile (\c -> c == ' ' || c == '\t')
+
+adjustLineDirective2 :: Int -> String -> Position -> Position
+adjustLineDirective2 pragmaLen str pos =
+    offs' `seq` fname' `seq` row' `seq` (position offs' fname' row' 1)
+    where
+    offs'           = (posOffset pos) + pragmaLen
+    str'            = dropWhite . drop 4 . dropWhite . drop 1 $ str
     (rowStr, str'') = span isDigit str'
     row'      = read rowStr
     str'''      = dropWhite str''
